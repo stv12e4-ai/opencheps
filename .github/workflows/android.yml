@@ -2,6 +2,8 @@ name: Android CI
 
 on:
   push:
+    branches: [ main, debug/calibration-diagnostics ]
+  pull_request:
     branches: [ main ]
   workflow_dispatch:
 
@@ -31,10 +33,8 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v3
 
-      - name: Generate Gradle wrapper
-        run: |
-          gradle wrapper --gradle-version 8.7 --distribution-type bin
-          chmod +x gradlew
+      - name: Verify runner Gradle
+        run: gradle --version
 
       - name: Cache Stockfish 18 binaries
         id: sfcache
@@ -73,7 +73,7 @@ jobs:
           ls -la app/src/main/jniLibs/*/
 
       - name: Build debug APK splits
-        run: ./gradlew :app:assembleDebug --no-daemon --stacktrace
+        run: gradle :app:assembleDebug --no-daemon --stacktrace
 
       - name: List APKs
         run: find app/build/outputs/apk -name '*.apk' -exec ls -lh {} \;

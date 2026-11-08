@@ -32,14 +32,30 @@ public class PieceClassifier {
     private float blackPieceLumAvg;
     private boolean trained;
     private Side bootstrapSide;
+    private String bootstrapFailure = "Not attempted";
 
     public boolean isTrained() { return trained; }
     public Side bootstrapSide() { return bootstrapSide; }
+    public String bootstrapFailure() { return bootstrapFailure; }
 
     public synchronized boolean tryBootstrap(Bitmap bmp, BoardDetector.Board board) {
-        if (board == null) return false;
+        bootstrapFailure = "";
+        if (board == null) {
+            bootstrapFailure = "No board bounds";
+            return false;
+        }
+        if (bmp == null) {
+            bootstrapFailure = "No captured frame";
+            return false;
+        }
         SquareSampler.Sample[] samples = sampleAll(bmp, board);
-        if (samples == null) return false;
+        if (samples == null) {
+            bootstrapFailure = "Board too small to sample";
+            Log.w(TAG, "bootstrap reject: invalid sample geometry bmp="
+                    + bmp.getWidth() + "x" + bmp.getHeight()
+                    + " board=" + board.left + "," + board.top + "," + board.side);
+            return false;
+        }
 
         float maxEmptyEdge = 0;
         int emptyCount = 0;
@@ -61,8 +77,14 @@ public class PieceClassifier {
         }
 
         if (minOccupiedEdge < maxEmptyEdge * 1.5f) {
-            Log.i(TAG, "bootstrap reject: minOccupied=" + minOccupiedEdge
-                    + " maxEmpty=" + maxEmptyEdge);
+            float ratio = maxEmptyEdge > 0f ? minOccupiedEdge / maxEmptyEdge : 0f;
+            bootstrapFailure = String.format(java.util.Locale.US,
+                    "Weak piece contrast %.2fx (need 1.50x)", ratio);
+            Log.w(TAG, "bootstrap reject: minOccupied=" + minOccupiedEdge
+                    + " maxEmpty=" + maxEmptyEdge + " ratio=" + ratio
+                    + " bmp=" + bmp.getWidth() + "x" + bmp.getHeight()
+                    + " board=" + board.left + "," + board.top + "," + board.side
+                    + " square=" + board.square);
             return false;
         }
 
@@ -121,6 +143,7 @@ public class PieceClassifier {
         frameChangeThreshold = Math.max(0.3f, maxBootstrapNoise * 2.0f + 0.1f);
 
         trained = true;
+        bootstrapFailure = "";
         Log.i(TAG, "BOOTSTRAPPED side=" + side
                 + " emptyMax=" + maxEmptyEdge
                 + " occMin=" + minOccupiedEdge
@@ -216,5 +239,6 @@ public class PieceClassifier {
         previousLabels = null;
         trained = false;
         bootstrapSide = null;
+        bootstrapFailure = "Not attempted";
     }
 }
