@@ -6,7 +6,6 @@ import android.graphics.PixelFormat;
 import android.os.Build;
 import android.view.Gravity;
 import android.view.LayoutInflater;
-import android.view.MotionEvent;
 import android.view.View;
 import android.view.WindowManager;
 import android.widget.ImageButton;
@@ -25,7 +24,6 @@ public class FloatingPanel {
     private ImageButton toggleBtn;
     private boolean paused = false;
     private Side userSide = Side.WHITE;
-    private int screenW, screenH;
 
     public interface Listener {
         void onPauseToggle(boolean paused);
@@ -78,41 +76,13 @@ public class FloatingPanel {
                 WindowManager.LayoutParams.WRAP_CONTENT,
                 type,
                 WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
-                        | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
-                        | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+                        | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
                 PixelFormat.TRANSLUCENT);
         lp.gravity = Gravity.TOP | Gravity.START;
         lp.x = 16;
         lp.y = 80;
 
-        root.setOnTouchListener(new View.OnTouchListener() {
-            float dx, dy; int sx, sy; boolean dragging;
-            @Override public boolean onTouch(View v, MotionEvent e) {
-                switch (e.getActionMasked()) {
-                    case MotionEvent.ACTION_DOWN:
-                        dx = e.getRawX(); dy = e.getRawY();
-                        sx = lp.x; sy = lp.y;
-                        dragging = false;
-                        return false;
-                    case MotionEvent.ACTION_MOVE:
-                        float dist = (float) Math.hypot(e.getRawX() - dx, e.getRawY() - dy);
-                        if (dist > 16) {
-                            dragging = true;
-                            lp.x = sx + (int) (e.getRawX() - dx);
-                            lp.y = sy + (int) (e.getRawY() - dy);
-                            try { wm.updateViewLayout(root, lp); } catch (Exception ignored) {}
-                            return true;
-                        }
-                        return false;
-                    case MotionEvent.ACTION_UP:
-                    case MotionEvent.ACTION_CANCEL:
-                        return dragging;
-                    default:
-                        return false;
-                }
-            }
-        });
-
+        // Intentionally no drag listener: the panel stays in one predictable spot.
         try { wm.addView(root, lp); } catch (Exception ignored) {}
         renderSideToggle();
     }
@@ -147,14 +117,15 @@ public class FloatingPanel {
     }
 
     public void placeBottomLeft(int screenWidth, int screenHeight) {
-        this.screenW = screenWidth;
-        this.screenH = screenHeight;
         if (root == null || lp == null) return;
         root.post(() -> {
             int h = root.getHeight();
-            if (h <= 0) h = 180;
-            lp.x = 16;
-            lp.y = Math.max(40, screenHeight - h - 200);
+            if (h <= 0) h = root.getMeasuredHeight();
+            int bottomMargin = Math.round(24f * ctx.getResources()
+                    .getDisplayMetrics().density);
+            lp.gravity = Gravity.TOP | Gravity.START;
+            lp.x = Math.round(12f * ctx.getResources().getDisplayMetrics().density);
+            lp.y = Math.max(0, screenHeight - h - bottomMargin);
             try { wm.updateViewLayout(root, lp); } catch (Exception ignored) {}
         });
     }
