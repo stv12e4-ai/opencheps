@@ -22,6 +22,13 @@ public class OverlayService extends Service {
     private WindowManager wm;
     private ArrowOverlayView arrows;
     private FloatingPanel panel;
+    private CalibrationOverlayView calibration;
+    private WindowManager.LayoutParams calibrationLp;
+
+    public interface CalibrationListener {
+        void onConfirm(Rect bounds);
+        void onCancel();
+    }
 
     @Nullable @Override public IBinder onBind(Intent i) { return null; }
 
@@ -54,6 +61,7 @@ public class OverlayService extends Service {
     }
 
     @Override public void onDestroy() {
+        hideCalibration();
         try { if (arrows != null) wm.removeView(arrows); } catch (Exception ignored) {}
         if (panel != null) panel.detach();
         instance = null;
@@ -84,5 +92,43 @@ public class OverlayService extends Service {
 
     public static void clearAll() {
         if (instance != null) instance.arrows.clearAll();
+    }
+
+    public static void showCalibration(Rect initial, CalibrationListener listener) {
+        if (instance == null) return;
+        instance.hideCalibration();
+        int type = Build.VERSION.SDK_INT >= 26
+                ? WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+                : WindowManager.LayoutParams.TYPE_PHONE;
+        instance.calibration = new CalibrationOverlayView(instance, initial,
+                new CalibrationOverlayView.Listener() {
+                    @Override public void onConfirm(Rect bounds) {
+                        instance.hideCalibration();
+                        if (listener != null) listener.onConfirm(bounds);
+                    }
+                    @Override public void onCancel() {
+                        instance.hideCalibration();
+                        if (listener != null) listener.onCancel();
+                    }
+                });
+        instance.calibrationLp = new WindowManager.LayoutParams(
+                WindowManager.LayoutParams.MATCH_PARENT,
+                WindowManager.LayoutParams.MATCH_PARENT,
+                type,
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+                        | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
+                        | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+                PixelFormat.TRANSLUCENT);
+        instance.calibrationLp.gravity = Gravity.TOP | Gravity.START;
+        try { instance.wm.addView(instance.calibration, instance.calibrationLp); }
+        catch (Exception e) { Log.e(TAG, "show calibration failed", e); instance.calibration = null; }
+    }
+
+    private void hideCalibration() {
+        if (calibration != null) {
+            try { wm.removeView(calibration); } catch (Exception ignored) {}
+            calibration = null;
+            calibrationLp = null;
+        }
     }
 }
