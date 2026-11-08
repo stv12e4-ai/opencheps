@@ -54,8 +54,8 @@ public class ScreenCaptureService extends Service {
     public static final String EXTRA_USER_SIDE   = "user_side";
     public static final String ACTION_STOP       = "com.opencheps.STOP";
 
-    private static final int[]   ARROW_COLORS = { 0xFF00C853, 0xFFFFB300, 0xFF29B6F6 };
-    private static final float[] ARROW_WIDTHS = { 18f, 13f, 10f };
+    private static final int   BEST_ARROW_COLOR = 0xFF00C853;
+    private static final float BEST_ARROW_WIDTH = 7f;
     private static final long    SAMPLE_PERIOD_MS = 500;
     private static final int     LOST_BOARD_THRESHOLD = 8;
 
@@ -411,7 +411,7 @@ public class ScreenCaptureService extends Service {
             String evalStr = best.mate
                     ? "M" + Math.abs(plyToMate(best.cp))
                     : String.format("%+.2f", best.cp / 100.0);
-            panelEval("YOU (" + userSide + ") " + formatUci(best.uci) + "  " + evalStr);
+            panelEval(formatUci(best.uci) + "  ·  " + evalStr);
             panelStatus("Your move (" + dt + " ms)");
         } catch (Exception e) {
             Log.w(TAG, "engine query failed", e);
@@ -438,20 +438,19 @@ public class ScreenCaptureService extends Service {
         float cellAvg = (cellX + cellY) * 0.5f;
         float ox = board.left * capToScreenX;
         float oy = board.top  * capToScreenY;
-        for (int i = 0; i < pvs.size(); i++) {
-            String uci = pvs.get(i).uci;
-            if (uci == null || uci.length() < 4) continue;
-            int fx = uci.charAt(0) - 'a', fy = 8 - (uci.charAt(1) - '0');
-            int tx = uci.charAt(2) - 'a', ty = 8 - (uci.charAt(3) - '0');
-            if (persp == Side.BLACK) {
-                fx = 7 - fx; fy = 7 - fy; tx = 7 - tx; ty = 7 - ty;
-            }
-            float sx = ox + (fx + 0.5f) * cellX, sy = oy + (fy + 0.5f) * cellY;
-            float ex = ox + (tx + 0.5f) * cellX, ey = oy + (ty + 0.5f) * cellY;
-            String lbl = (i == 0 ? "★ " : "") + uci;
-            float width = Math.max(8f, ARROW_WIDTHS[i] * Math.min(1.5f, cellAvg / 60f));
-            out.add(new ArrowOverlayView.Arrow(sx, sy, ex, ey, ARROW_COLORS[i], width, lbl));
+        if (pvs.isEmpty()) return out;
+        String uci = pvs.get(0).uci;
+        if (uci == null || uci.length() < 4) return out;
+        int fx = uci.charAt(0) - 'a', fy = 8 - (uci.charAt(1) - '0');
+        int tx = uci.charAt(2) - 'a', ty = 8 - (uci.charAt(3) - '0');
+        if (persp == Side.BLACK) {
+            fx = 7 - fx; fy = 7 - fy; tx = 7 - tx; ty = 7 - ty;
         }
+        float sx = ox + (fx + 0.5f) * cellX, sy = oy + (fy + 0.5f) * cellY;
+        float ex = ox + (tx + 0.5f) * cellX, ey = oy + (ty + 0.5f) * cellY;
+        float width = Math.max(4f, BEST_ARROW_WIDTH * Math.min(1.5f, cellAvg / 60f));
+        out.add(new ArrowOverlayView.Arrow(
+                sx, sy, ex, ey, BEST_ARROW_COLOR, width, null));
         return out;
     }
 
