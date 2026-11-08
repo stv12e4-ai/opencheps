@@ -35,7 +35,7 @@ jobs:
 
       - name: Generate Gradle wrapper
         run: |
-          gradle wrapper --gradle-version 8.7 --distribution-type bin --no-validate-url
+          gradle wrapper --gradle-version 8.7 --distribution-type bin --gradle-distribution-url https://downloads.gradle.org/distributions/gradle-8.7-bin.zip --no-validate-url
           chmod +x gradlew
 
       - name: Cache Stockfish 18 binaries
