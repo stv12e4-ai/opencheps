@@ -2,7 +2,7 @@ name: Android CI
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, debug/calibration-diagnostics ]
   workflow_dispatch:
 
 jobs:
