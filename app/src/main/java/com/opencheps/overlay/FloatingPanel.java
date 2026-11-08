@@ -6,6 +6,7 @@ import android.graphics.PixelFormat;
 import android.os.Build;
 import android.view.Gravity;
 import android.view.LayoutInflater;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.WindowManager;
 import android.widget.ImageButton;
@@ -20,7 +21,7 @@ public class FloatingPanel {
     private final WindowManager wm;
     private View root;
     private WindowManager.LayoutParams lp;
-    private TextView statusTv, evalTv, sideWhiteTv, sideBlackTv;
+    private TextView statusTv, evalTv, sideWhiteTv, sideBlackTv, titleTv;
     private ImageButton toggleBtn;
     private boolean paused = false;
     private Side userSide = Side.WHITE;
@@ -45,6 +46,7 @@ public class FloatingPanel {
         if (root != null) return;
         root = LayoutInflater.from(ctx).inflate(R.layout.floating_panel, null);
         statusTv    = root.findViewById(R.id.panelStatus);
+        titleTv     = root.findViewById(R.id.panelTitle);
         evalTv      = root.findViewById(R.id.panelEval);
         sideWhiteTv = root.findViewById(R.id.sideWhite);
         sideBlackTv = root.findViewById(R.id.sideBlack);
@@ -82,9 +84,43 @@ public class FloatingPanel {
         lp.x = 16;
         lp.y = 80;
 
-        // Intentionally no drag listener: the panel stays in one predictable spot.
+        // Drag from the icon or title/status area; keep the control buttons tappable.
+        attachDragHandle(root.findViewById(R.id.panelIcon));
+        attachDragHandle(titleTv);
+        attachDragHandle(statusTv);
         try { wm.addView(root, lp); } catch (Exception ignored) {}
         renderSideToggle();
+    }
+
+    @SuppressLint("ClickableViewAccessibility")
+    private void attachDragHandle(View handle) {
+        if (handle == null) return;
+        handle.setOnTouchListener(new View.OnTouchListener() {
+            private int startX, startY;
+            private float downRawX, downRawY;
+
+            @Override public boolean onTouch(View v, MotionEvent event) {
+                switch (event.getAction()) {
+                    case MotionEvent.ACTION_DOWN:
+                        startX = lp.x;
+                        startY = lp.y;
+                        downRawX = event.getRawX();
+                        downRawY = event.getRawY();
+                        return true;
+                    case MotionEvent.ACTION_MOVE:
+                        int maxX = Math.max(0, ctx.getResources().getDisplayMetrics().widthPixels - root.getWidth());
+                        int maxY = Math.max(0, ctx.getResources().getDisplayMetrics().heightPixels - root.getHeight());
+                        lp.x = Math.max(0, Math.min(maxX, startX + Math.round(event.getRawX() - downRawX)));
+                        lp.y = Math.max(0, Math.min(maxY, startY + Math.round(event.getRawY() - downRawY)));
+                        try { wm.updateViewLayout(root, lp); } catch (Exception ignored) {}
+                        return true;
+                    case MotionEvent.ACTION_UP:
+                    case MotionEvent.ACTION_CANCEL:
+                        return true;
+                }
+                return true;
+            }
+        });
     }
 
     private void chooseSide(Side s) {
