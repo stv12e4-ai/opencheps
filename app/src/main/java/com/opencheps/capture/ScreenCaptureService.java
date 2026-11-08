@@ -85,6 +85,8 @@ public class ScreenCaptureService extends Service {
     private String lastDisplayedArrowFen = "";
     private int lostBoardCount = 0;
     private BoardDetector.Board lastKnownBoard;
+    private volatile BoardDetector.Board manualBoard;
+    private boolean pausedBeforeCalibration;
     private List<ArrowOverlayView.Arrow> currentArrows = new ArrayList<>();
 
     @Nullable @Override public IBinder onBind(Intent i) { return null; }
@@ -134,6 +136,7 @@ public class ScreenCaptureService extends Service {
         });
 
         setupVirtualDisplay();
+        loadManualBoard();
         wirePanel();
         worker.postDelayed(sampleLoop, 1000);
         panelStatus("Starting as " + userSide);
@@ -163,10 +166,7 @@ public class ScreenCaptureService extends Service {
                     }
                     @Override public void onStop() { stopSelf(); }
                     @Override public void onRecalibrate() {
-                        classifier.reset();
-                        resetGameState();
-                        OverlayService.clearAll();
-                        panelStatus("Recalibrating · show starting position");
+                        beginManualCalibration();
                     }
                     @Override public void onSideChange(Side newSide) {
                         userSide = newSide;
@@ -187,6 +187,74 @@ public class ScreenCaptureService extends Service {
                 });
             }
         }, 400);
+    }
+
+    private void beginManualCalibration() {
+        pausedBeforeCalibration = paused;
+        paused = true;
+        if (worker != null) worker.post(this::drainReader);
+        OverlayService.clearAll();
+        Rect initial;
+        if (lastKnownBoard != null) {
+            initial = boardBoundsOnScreen(lastKnownBoard);
+        } else {
+            int side = Math.round(Math.min(screenW, screenH) * 0.72f);
+            int left = (screenW - side) / 2;
+            int top = Math.max(Math.round(72 * getResources().getDisplayMetrics().density),
+                    (screenH - side) / 2);
+            if (top + side > screenH - 100) top = Math.max(0, screenH - side - 100);
+            initial = new Rect(left, top, left + side, top + side);
+        }
+        panelStatus("Adjust the board box · confirm when aligned");
+        OverlayService.showCalibration(initial, new OverlayService.CalibrationListener() {
+            @Override public void onConfirm(Rect bounds) {
+                int sidePx = Math.min(bounds.width(), bounds.height());
+                if (sidePx < 160 || bounds.left < 0 || bounds.top < 0
+                        || bounds.left + sidePx > screenW || bounds.top + sidePx > screenH) {
+                    panelStatus("Calibration box invalid · try again");
+                    paused = pausedBeforeCalibration;
+                    return;
+                }
+                int left = Math.round(bounds.left / capToScreenX);
+                int top = Math.round(bounds.top / capToScreenY);
+                int side = Math.round(sidePx / Math.min(capToScreenX, capToScreenY));
+                manualBoard = new BoardDetector.Board(left, top, side, 100.0);
+                getSharedPreferences("manual_board", MODE_PRIVATE).edit()
+                        .putFloat("left", bounds.left / (float) screenW)
+                        .putFloat("top", bounds.top / (float) screenH)
+                        .putFloat("side", sidePx / (float) Math.min(screenW, screenH))
+                        .putBoolean("enabled", true).apply();
+                lastKnownBoard = manualBoard;
+                classifier.reset();
+                resetGameState();
+                lostBoardCount = 0;
+                paused = false;
+                if (worker != null) worker.post(this::drainReader);
+                panelStatus("Manual board locked · show starting position");
+            }
+
+            @Override public void onCancel() {
+                paused = pausedBeforeCalibration;
+                panelStatus(paused ? "Paused" : "Calibration cancelled");
+            }
+        });
+    }
+
+    private void loadManualBoard() {
+        android.content.SharedPreferences p = getSharedPreferences("manual_board", MODE_PRIVATE);
+        if (!p.getBoolean("enabled", false)) return;
+        float left = p.getFloat("left", -1f);
+        float top = p.getFloat("top", -1f);
+        float side = p.getFloat("side", -1f);
+        if (left < 0 || top < 0 || side <= 0) return;
+        int x = Math.round(left * screenW);
+        int y = Math.round(top * screenH);
+        int s = Math.round(side * Math.min(screenW, screenH));
+        if (x + s > screenW || y + s > screenH || s < 160) return;
+        manualBoard = new BoardDetector.Board(Math.round(x / capToScreenX),
+                Math.round(y / capToScreenY),
+                Math.round(s / Math.min(capToScreenX, capToScreenY)), 100.0);
+        lastKnownBoard = manualBoard;
     }
 
     private void resetGameState() {
@@ -231,7 +299,7 @@ public class ScreenCaptureService extends Service {
             img.close();
             img = null;
 
-            BoardDetector.Board board = BoardDetector.locate(bmp);
+            BoardDetector.Board board = manualBoard != null ? manualBoard : BoardDetector.locate(bmp);
 
             if (board == null) {
                 lostBoardCount++;
