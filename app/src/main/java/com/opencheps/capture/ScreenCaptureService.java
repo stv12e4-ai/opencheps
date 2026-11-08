@@ -229,7 +229,7 @@ public class ScreenCaptureService extends Service {
                 resetGameState();
                 lostBoardCount = 0;
                 paused = false;
-                if (worker != null) worker.post(this::drainReader);
+                if (worker != null) worker.post(ScreenCaptureService.this::drainReader);
                 panelStatus("Manual board locked · show starting position");
             }
 
