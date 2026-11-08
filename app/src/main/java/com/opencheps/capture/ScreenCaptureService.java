@@ -324,7 +324,10 @@ public class ScreenCaptureService extends Service {
             if (!classifier.isTrained()) {
                 boolean ok = classifier.tryBootstrap(bmp, board);
                 if (!ok) {
-                    panelStatus("Show STARTING position to calibrate");
+                    String reason = classifier.bootstrapFailure();
+                    panelStatus(reason == null || reason.isEmpty()
+                            ? "Calibration rejected · check starting position"
+                            : "Calibration: " + reason);
                     OverlayService.setBoardFrameColor(0x66FFB300);
                     return;
                 }
